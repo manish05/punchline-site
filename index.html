@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PUNCHLINE — jokes ranked by laughs, backed by data</title>
+<meta name="description" content="One & two-liner jokes mined from popular YouTube comedy, ranked by the YouTube Most-Replayed laugh graph, reach, repetition and engagement.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="mesh"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div></div>
+
+<nav class="nav"><div class="wrap">
+  <div class="logo"><img src="logo.svg" alt="Punchline" class="logo-mark">PUNCH<span class="logo-g">LINE</span></div>
+  <div class="nav-sp"></div>
+  <a class="ghost" href="#how">How it's ranked</a>
+  <a class="ghost" href="https://github.com/garrytan/gbrain" target="_blank" rel="noopener">Data ❤︎ open</a>
+</div></nav>
+
+<header class="hero wrap">
+  <span class="kicker">◆ ranked by the laugh graph, not opinions</span>
+  <h1>The jokes that<br><span class="g">actually land.</span></h1>
+  <p class="sub">We mined the funniest one & two-liners from the most-watched comedy on YouTube, then ranked every punchline by the moments real audiences <em>rewatched the most</em> — the closest thing to measuring a laugh.</p>
+  <div class="stats" id="stats"></div>
+</header>
+
+<div class="marquee"><div class="track" id="marquee"></div></div>
+
+<section class="wrap">
+  <div class="cats-row">
+    <div class="chips" id="cats">
+      <button class="chip on" data-cat="oneliner">🎤 One-liners</button>
+      <button class="chip" data-cat="dadjoke">👨 Dad jokes (Q&amp;A)</button>
+    </div>
+  </div>
+  <div class="controls">
+    <label class="search">
+      <span>🔎</span>
+      <input id="q" type="search" placeholder="Search jokes by meaning — try “airplane food”, “marriage”, “drinking”…" autocomplete="off">
+      <span class="hint" id="searchmode">semantic</span>
+    </label>
+    <div class="chips" id="sorts">
+      <button class="chip on" data-sort="score">🏆 Top ranked</button>
+      <button class="chip" data-sort="punch">💥 Hardest punch</button>
+      <button class="chip" data-sort="repeat">🔁 Most repeated</button>
+      <button class="chip" data-sort="reach">👀 Biggest reach</button>
+    </div>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none">No jokes match that. Try another search 🤷</div>
+</section>
+
+<section class="wrap" id="how" style="padding:30px 0 70px">
+  <div style="background:var(--surface-solid);border:1px solid var(--line);border-radius:var(--r);padding:32px">
+    <h2 style="font-family:'Space Grotesk';margin-top:0">How the ranking works</h2>
+    <p style="color:var(--muted);max-width:720px">Every joke gets a 0–100 score blending four signals. The headline number is <b style="color:var(--magenta)">Punch</b> — how hard real viewers rewatched that exact moment.</p>
+    <div id="how-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-top:18px"></div>
+  </div>
+</section>
+
+<div class="modal" id="modal">
+  <div class="box">
+    <button class="close" onclick="closeModal()">×</button>
+    <div class="vid" id="vidwrap"></div>
+    <div class="mbody">
+      <h3 id="m-text"></h3>
+      <div class="m-ctx" id="m-ctx"></div>
+      <div class="jmeta" id="m-meta"></div>
+      <div class="react">
+        <button onclick="laugh(event)">😂 LOL</button>
+        <button onclick="laugh(event)">💀 dead</button>
+        <button onclick="laugh(event)">👏 bravo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="foot wrap">
+  Built with yt-dlp · local MiniLM vectors · gbrain/PGLite · Haiku extraction agents.<br>
+  Punch = YouTube “Most Replayed” intensity at the punchline. No logins, no ads — <a href="#">free for all</a>.
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
