@@ -12,12 +12,9 @@ async function boot(){
     DATA = await (await fetch('jokes.json',{cache:'no-store'})).json();
   }catch(e){ grid.innerHTML = '<div class="empty">Couldn’t load data. Run the pipeline first.</div>'; return; }
   renderStats(); renderMarquee(); renderHow();
-  // observe scroll reveals (create BEFORE first render)
-  io = new IntersectionObserver(es=>es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} }),{threshold:.08, rootMargin:'0px 0px -40px 0px'});
-  apply();
+  apply(false);   // initial render, keep scroll at hero
   wireControls();
 }
-let io;
 
 function countUp(el, to){
   const dur=1100, t0=performance.now();
@@ -81,62 +78,108 @@ async function doSearch(query){
   apply();
 }
 
-function apply(){
+function apply(resetScroll){
   let list = (searchResults ? searchResults.slice() : DATA.jokes.slice())
              .filter(j => (j.category||'oneliner') === category);
   if(!searchResults || sortKey!=='score'){
-    const key = sortKey==='score'?'score': null;
     list.sort((a,b)=> sortKey==='score'? b.score-a.score
       : sortKey==='punch'? (b.breakdown.punch??-1)-(a.breakdown.punch??-1)
       : sortKey==='repeat'? (b.repeated_count-a.repeated_count)||(b.score-a.score)
       : sortKey==='reach'? b.breakdown.reach-a.breakdown.reach : 0);
   }
-  VIEW = list.slice(0, 120);
-  render();
+  VIEW = list;                       // no cap — the list is virtualized
+  $('#count').textContent = VIEW.length.toLocaleString();
+  setupVirtual(resetScroll!==false); // default: jump to top of list
 }
 
-function render(){
-  $('#empty').style.display = VIEW.length? 'none':'block';
-  grid.innerHTML = '';
-  VIEW.forEach((j,idx)=>{
-    const v = DATA.videos_map[j.video_id]||{};
-    const el = document.createElement('article');
-    el.className = 'card' + (idx===0 && sortKey==='score' && !searchResults ? ' top1':'');
-    el.style.transitionDelay = Math.min(idx*40,400)+'ms';
-    const rep = j.repeated_count>1 ? `<span class="tag rep" title="this joke is told across ${j.repeated_count} different videos">🔁 told in ${j.repeated_count} videos</span>`:'';
-    const sim = j.similarity!=null ? `<span class="tag">match ${Math.round(j.similarity*100)}%</span>`:'';
-    const fun = j.funny ? `<span class="tag fun" title="editor funniness rating">😂 ${j.funny}/5</span>`:'';
-    const body = (j.category==='dadjoke' && j.setup && j.punchline)
-      ? `<p class="text qa"><span class="q">${esc(j.setup)}</span><span class="a">${esc(j.punchline)}</span></p>`
-      : `<p class="text">“${esc(j.text)}”</p>`;
-    const ctx = j.context ? `<p class="ctx">💡 ${esc(j.context)}</p>` : '';
-    el.innerHTML = `
-      <div class="rank">${searchResults?'★':'#'+(idx+1)}<small>${j.score.toFixed(0)} pts</small></div>
-      <div class="jbody">
-        ${body}${ctx}
-        <div class="jmeta">
-          <span class="who">${esc(v.channel||'Unknown')}</span>
-          <span>· ${fmt(v.views)} views · ${hms(j.start)}</span>
-          <span class="tag type">${j.type}</span>${fun}${rep}${sim}
-        </div>
-        <button class="play" onclick="openModal(${j.id})">▶ Watch the laugh</button>
-      </div>
-      <div class="metrics">
-        <div class="punch"><span class="v">${j.breakdown.punch==null?'n/a':Math.round(j.breakdown.punch*100)}</span><span class="l">punch<br>power</span></div>
-        <svg class="spark" viewBox="0 0 230 46" preserveAspectRatio="none"></svg>
-        <div class="bars">
-          ${bar('punch',j.breakdown.punch)}${bar('reach',j.breakdown.reach)}
-          ${bar('repeat',j.breakdown.repeat)}${bar('engage',j.breakdown.engage)}
-        </div>
-      </div>`;
-    grid.appendChild(el);
-    drawSpark(el.querySelector('.spark'), v.heatmap||[], j.start, j.end, v.duration);
-    io.observe(el);
+/* ---- virtualized list: constant DOM nodes, variable row heights ---- */
+const GAP=18, OVER=6;
+let vH=[], vTop=[], vTotal=0; const vEst=170;
+const vMounted=new Map();           // index -> element
+let vRaf=false, vReflow=false;
+
+function recomputeTops(){
+  vTop=new Array(vH.length); let y=8;
+  for(let i=0;i<vH.length;i++){ vTop[i]=y; y+=vH[i]+GAP; }
+  vTotal=y;
+  grid.style.height=(vTotal+40)+'px';
+}
+function setupVirtual(resetScroll){
+  $('#empty').style.display = VIEW.length ? 'none':'block';
+  for(const el of vMounted.values()) el.remove();
+  vMounted.clear();
+  grid.style.display='block'; grid.style.position='relative'; grid.style.padding='0';
+  vH = VIEW.map(()=>vEst);
+  recomputeTops();
+  if(resetScroll){
+    const top = grid.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo(0, Math.max(0, top - 150));
+  }
+  renderWindow();
+}
+function gridScrollY(){ return window.scrollY - (grid.getBoundingClientRect().top + window.scrollY); }
+function firstAt(y){ let lo=0,hi=vTop.length-1,a=0; while(lo<=hi){const m=(lo+hi)>>1; if(vTop[m]<=y){a=m;lo=m+1;}else hi=m-1;} return a; }
+
+function renderWindow(){
+  if(!VIEW.length){ for(const el of vMounted.values())el.remove(); vMounted.clear(); return; }
+  const sy=gridScrollY(), vh=window.innerHeight;
+  const start=Math.max(0, firstAt(Math.max(0,sy))-OVER);
+  const end=Math.min(VIEW.length-1, firstAt(sy+vh)+OVER);
+  for(const [i,el] of vMounted){ if(i<start||i>end){ el.remove(); vMounted.delete(i); } }
+  for(let i=start;i<=end;i++){
+    if(vMounted.has(i)) continue;
+    const el=makeCard(VIEW[i], i);
+    el.style.position='absolute'; el.style.left='0'; el.style.right='0'; el.style.top=vTop[i]+'px';
+    grid.appendChild(el); vMounted.set(i, el);
+    const v=DATA.videos_map[VIEW[i].video_id]||{};
+    drawSpark(el.querySelector('.spark'), v.heatmap||[], VIEW[i].start, VIEW[i].end, v.duration);
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      el.querySelectorAll('.fill').forEach(f=>f.style.width=f.dataset.w);
-    }));
+      el.querySelectorAll('.fill').forEach(f=>f.style.width=f.dataset.w); }));
+    const h=el.offsetHeight;
+    if(h && Math.abs(h-vH[i])>1){ vH[i]=h; scheduleReflow(); }
+  }
+}
+function scheduleReflow(){
+  if(vReflow) return; vReflow=true;
+  requestAnimationFrame(()=>{ vReflow=false; recomputeTops();
+    for(const [i,el] of vMounted) el.style.top=vTop[i]+'px';
+    renderWindow();
   });
 }
+function makeCard(j, idx){
+  const v=DATA.videos_map[j.video_id]||{};
+  const el=document.createElement('article');
+  el.className='card in'+(idx===0 && sortKey==='score' && !searchResults ? ' top1':'');
+  const rep = j.repeated_count>1 ? `<span class="tag rep" title="this joke is told across ${j.repeated_count} different videos">🔁 told in ${j.repeated_count} videos</span>`:'';
+  const sim = j.similarity!=null ? `<span class="tag">match ${Math.round(j.similarity*100)}%</span>`:'';
+  const fun = j.funny ? `<span class="tag fun" title="editor funniness rating">😂 ${j.funny}/5</span>`:'';
+  const body = (j.category==='dadjoke' && j.setup && j.punchline)
+    ? `<p class="text qa"><span class="q">${esc(j.setup)}</span><span class="a">${esc(j.punchline)}</span></p>`
+    : `<p class="text">“${esc(j.text)}”</p>`;
+  const ctx = j.context ? `<p class="ctx">💡 ${esc(j.context)}</p>` : '';
+  el.innerHTML = `
+    <div class="rank">${searchResults?'★':'#'+(idx+1)}<small>${j.score.toFixed(0)} pts</small></div>
+    <div class="jbody">
+      ${body}${ctx}
+      <div class="jmeta">
+        <span class="who">${esc(v.channel||'Unknown')}</span>
+        <span>· ${fmt(v.views)} views · ${hms(j.start)}</span>
+        <span class="tag type">${j.type}</span>${fun}${rep}${sim}
+      </div>
+      <button class="play" onclick="openModal(${j.id})">▶ Watch the laugh</button>
+    </div>
+    <div class="metrics">
+      <div class="punch"><span class="v">${j.breakdown.punch==null?'n/a':Math.round(j.breakdown.punch*100)}</span><span class="l">punch<br>power</span></div>
+      <svg class="spark" viewBox="0 0 230 46" preserveAspectRatio="none"></svg>
+      <div class="bars">
+        ${bar('punch',j.breakdown.punch)}${bar('reach',j.breakdown.reach)}
+        ${bar('repeat',j.breakdown.repeat)}${bar('engage',j.breakdown.engage)}
+      </div>
+    </div>`;
+  return el;
+}
+addEventListener('scroll', ()=>{ if(vRaf)return; vRaf=true; requestAnimationFrame(()=>{ vRaf=false; renderWindow(); }); }, {passive:true});
+let vResize; addEventListener('resize', ()=>{ clearTimeout(vResize); vResize=setTimeout(()=>setupVirtual(false), 150); });
 const bar=(k,v)=>`<div class="bar"><span>${k}</span><span class="track"><span class="fill ${k}-c" data-w="${Math.round((v||0)*100)}%"></span></span></div>`;
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 

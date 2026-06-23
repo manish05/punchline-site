@@ -109,7 +109,9 @@ a{color:inherit}
 .jbody .ctx{margin:-4px 0 12px; font-size:13.5px; color:var(--muted); line-height:1.45;
   border-left:2px solid var(--violet); padding-left:12px; max-width:640px}
 .tag.fun{color:var(--lime); border-color:#c8f13544; background:#c8f1350f}
-.cats-row{padding:18px 0 0}
+.cats-row{padding:18px 0 0; display:flex; align-items:center; gap:16px; flex-wrap:wrap}
+.count-pill{margin-left:auto; font-family:'Space Mono'; font-size:13px; color:var(--muted)}
+.count-pill b{color:var(--lime); font-size:16px}
 #cats .chip.on{background:var(--violet); color:#fff; border-color:var(--violet); box-shadow:0 8px 20px -6px var(--violet)}
 .m-ctx{margin:4px 0 12px; color:var(--muted); font-size:14.5px; line-height:1.5;
   background:#9b6bff14; border:1px solid #9b6bff33; border-radius:12px; padding:12px 14px}
